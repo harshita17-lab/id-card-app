@@ -13,14 +13,13 @@ CARD_H = 898
 
 
 # -----------------------------
-# SAFE FIT (NO CUT, NO DISTORTION)
+# SAFE FIT (NO CUT)
 # -----------------------------
 def safe_fit(img, target_w, target_h):
 
-    # Ensure RGB
     img = img.convert("RGB")
 
-    # Resize to fit INSIDE target without cropping
+    # Resize inside without cropping
     img = ImageOps.contain(img, (target_w, target_h), Image.Resampling.LANCZOS)
 
     # Create white background
@@ -49,16 +48,16 @@ def process_id_cards(pdf_path, output_folder):
         return
 
     # -----------------------------
-    # Extract PDF number (robust)
+    # 🔥 Extract LAST number from filename (IMPORTANT FIX)
     # -----------------------------
     pdf_name = os.path.splitext(os.path.basename(pdf_path))[0]
 
-    match = re.search(r'\d+', pdf_name)
+    numbers = re.findall(r'\d+', pdf_name)
 
-    if match:
-        pdf_number = match.group()
+    if numbers:
+        pdf_number = numbers[-1]   # take LAST number
     else:
-        pdf_number = "0"  # fallback
+        pdf_number = "0"
 
     total_pairs = len(doc) // 2
 
@@ -72,7 +71,6 @@ def process_id_cards(pdf_path, output_folder):
     for i in range(total_pairs):
 
         id_index = i + 1
-
         front_index = i * 2
         back_index = i * 2 + 1
 
@@ -106,4 +104,4 @@ def process_id_cards(pdf_path, output_folder):
         except Exception as e:
             print(f"❌ Error in PDF {pdf_number}, ID {id_index}: {e}")
 
-    print(f"🎉 Completed processing PDF {pdf_number}")
+    print(f"🎉 Completed PDF {pdf_number}")
