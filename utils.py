@@ -1,22 +1,32 @@
-import fitz
+import fitz  # PyMuPDF
 from PIL import Image, ImageOps
 import io
 import os
+import re
 
 
+# -----------------------------
+# FINAL CARD SIZE (400 DPI)
+# -----------------------------
 CARD_W = 1386
 CARD_H = 898
 
 
-# ---------------- SAFE FIT (NO CUT) ----------------
+# -----------------------------
+# SAFE FIT (NO CUT, NO DISTORTION)
+# -----------------------------
 def safe_fit(img, target_w, target_h):
 
+    # Ensure RGB
     img = img.convert("RGB")
 
+    # Resize to fit INSIDE target without cropping
     img = ImageOps.contain(img, (target_w, target_h), Image.Resampling.LANCZOS)
 
+    # Create white background
     canvas = Image.new("RGB", (target_w, target_h), (255, 255, 255))
 
+    # Center image
     x = (target_w - img.width) // 2
     y = (target_h - img.height) // 2
 
@@ -25,22 +35,43 @@ def safe_fit(img, target_w, target_h):
     return canvas
 
 
-# ---------------- PROCESS SINGLE PDF ----------------
+# -----------------------------
+# PROCESS ID CARDS
+# -----------------------------
 def process_id_cards(pdf_path, output_folder):
 
     os.makedirs(output_folder, exist_ok=True)
 
-    doc = fitz.open(pdf_path)
+    try:
+        doc = fitz.open(pdf_path)
+    except Exception as e:
+        print(f"❌ Error opening PDF: {e}")
+        return
 
-    # extract PDF number from filename (e.g., "2.pdf" → 2)
+    # -----------------------------
+    # Extract PDF number (robust)
+    # -----------------------------
     pdf_name = os.path.splitext(os.path.basename(pdf_path))[0]
-    pdf_number = pdf_name  # keeps "1", "2", etc.
+
+    match = re.search(r'\d+', pdf_name)
+
+    if match:
+        pdf_number = match.group()
+    else:
+        pdf_number = "0"  # fallback
 
     total_pairs = len(doc) // 2
 
+    if total_pairs == 0:
+        print(f"⚠️ No ID pairs found in {pdf_name}")
+        return
+
+    # -----------------------------
+    # PROCESS EACH ID
+    # -----------------------------
     for i in range(total_pairs):
 
-        id_index = i + 1  # 1-based inside each PDF
+        id_index = i + 1
 
         front_index = i * 2
         back_index = i * 2 + 1
@@ -49,6 +80,7 @@ def process_id_cards(pdf_path, output_folder):
             # -------- FRONT --------
             front_pix = doc[front_index].get_pixmap(dpi=400)
             front_img = Image.open(io.BytesIO(front_pix.tobytes()))
+
             front_img = safe_fit(front_img, CARD_W, CARD_H)
 
             front_img.save(
@@ -60,6 +92,7 @@ def process_id_cards(pdf_path, output_folder):
             # -------- BACK --------
             back_pix = doc[back_index].get_pixmap(dpi=400)
             back_img = Image.open(io.BytesIO(back_pix.tobytes()))
+
             back_img = safe_fit(back_img, CARD_W, CARD_H)
 
             back_img.save(
@@ -68,7 +101,9 @@ def process_id_cards(pdf_path, output_folder):
                 quality=95
             )
 
-        except Exception as e:
-            print(f"Error processing ID {id_index} in PDF {pdf_number}: {e}")
+            print(f"✅ PDF {pdf_number} → ID {id_index} done")
 
-    print(f"✅ Completed PDF {pdf_number}")
+        except Exception as e:
+            print(f"❌ Error in PDF {pdf_number}, ID {id_index}: {e}")
+
+    print(f"🎉 Completed processing PDF {pdf_number}")
